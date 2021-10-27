@@ -5,12 +5,16 @@ import "./RandomNumberGenerator.sol";
 
 // he usado este tutorial: https://betterprogramming.pub/build-a-verifiably-random-lottery-smart-contract-on-ethereum-c1daacc1ca4e
 
+// TODO: deploying both lottery and random generator works, but 
+// --> Error when calling request of randomNumberGenerator (how to correctly deploy this contract? (right now using variables of https://docs.chain.link/docs/get-a-random-number/)
+// --> Error when calling finishLottery (submitEntry is working)
+
 contract Lottery {
     enum State { Open, Closed }
     State public state;
-    uint public entryFee = 1;
+    uint public entryFee;
     bytes32 randomNumberRequestId;
-    address[] entries;
+    address[] public entries; //TODO: remove public but keep it here for now for debugging reasons
     address randomNumberGenerator;
     address contractManager;
     uint public winningPlayerIndex;
@@ -32,9 +36,9 @@ contract Lottery {
 		require(_randomNumberGenerator != address(0), "Random number generator must be valid address");
 		require(isContract(_randomNumberGenerator), "Random number generator must be smart contract");
 		require(_contractManager != address(0), "Contract manager must be valid address");
-		require(isContract(_contractManager), "Contract manager must be smart contract");
 		entryFee = _entryFee;
 		randomNumberGenerator = _randomNumberGenerator;
+		contractManager = _contractManager;
 		changeState(State.Open);
 	}
     
@@ -73,7 +77,7 @@ contract Lottery {
 		payable(winner).transfer(balance);
 	}
 	
-	// reset the lottery  
+	// reset the lottery so it can start again
     function reset() private {
         delete entries;
         changeState(State.Open);

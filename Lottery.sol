@@ -1,21 +1,19 @@
-
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.7;
 
-import "@openzeppelin/contracts/utils/EnumerableSet.sol";
+import "./RandomNumberGenerator.sol";
 
 // he usado este tutorial: https://betterprogramming.pub/build-a-verifiably-random-lottery-smart-contract-on-ethereum-c1daacc1ca4e
 
 contract Lottery {
-    enum State { Open, Closed, Finished }
+    enum State { Open, Closed }
     State public state;
-    int entryFee = 1;
+    uint public entryFee = 1;
+    bytes32 randomNumberRequestId;
     address[] entries;
     address randomNumberGenerator;
-    
-    //TODO: contractManager should be able to call finishLottery()
-    //TODO: (pregunta) el gestora del contract deberia ser el Owner o no? -> if yes we should put Ownable in constructor
     address contractManager;
+    uint public winningPlayerIndex;
 
     event NewEntry(address player);
     event LotteryStateChanged(State newState);
@@ -28,28 +26,28 @@ contract Lottery {
         _;
     }
     
-    //constructor
+    // constructor
 	constructor (uint _entryFee, address _contractManager, address _randomNumberGenerator) {
 		require(_entryFee > 0, "Entry fee must be greater than 0");
 		require(_randomNumberGenerator != address(0), "Random number generator must be valid address");
-		require(_randomNumberGenerator.isContract(), "Random number generator must be smart contract");
+		require(isContract(_randomNumberGenerator), "Random number generator must be smart contract");
 		require(_contractManager != address(0), "Contract manager must be valid address");
-		require(_contractManager.isContract(), "Contract manager must be smart contract");
+		require(isContract(_contractManager), "Contract manager must be smart contract");
 		entryFee = _entryFee;
 		randomNumberGenerator = _randomNumberGenerator;
 		changeState(State.Open);
 	}
     
     // players can only submit entry if the lottery is open
-    // TODO: (pregunta) no estoy segura si "payabla" es necesario aqui
     function submitEntry() public payable isState(State.Open) {
         require(msg.value >= entryFee, "Minimum entry fee required");
-        entries.add(msg.sender);
+        entries.push(msg.sender);
         emit NewEntry(msg.sender);
     }
     
-    // gets called by contract manager / owner
-    function finishLottery(uint256 _seed) public onlyOwner isState(State.Open){
+    // gets called by contract manager
+    function finishLottery(uint256 _seed) public isState(State.Open){
+        require(msg.sender == contractManager, "Only contract manager can finish the lottery.");
         changeState(State.Closed);
         drawPlayer(_seed);
     }
@@ -62,11 +60,10 @@ contract Lottery {
     // gets called in RandomNumberGenerator after calling drawPlayer()
     function playerDrawn(bytes32 _randomNumberRequestId, uint _randomNumber) public isState(State.Closed) {
 		if (_randomNumberRequestId == randomNumberRequestId) {
-			winningNumber = _randomNumber;
-			uint playerIndex = _randomNumber % entries.length;
-			emit PlayerDrawn(_randomNumberRequestId, playerIndex);
-			pay(entries[playerIndex]);
-			changeState(LotteryState.Finished);
+			winningPlayerIndex = _randomNumber % entries.length;
+			emit PlayerDrawn(_randomNumberRequestId, winningPlayerIndex);
+			pay(entries[winningPlayerIndex]);
+			reset();
 		}
 	}
 	
@@ -75,11 +72,27 @@ contract Lottery {
 		uint balance = address(this).balance;
 		payable(winner).transfer(balance);
 	}
-
+	
+	// reset the lottery  
+    function reset() private {
+        delete entries;
+        changeState(State.Open);
+        
+	}
     
     function changeState(State newState) private {
 		state = newState;
 		emit LotteryStateChanged(state);
 	}
+	
+	// warning from https://ethereum.stackexchange.com/questions/15641/how-does-a-contract-find-out-if-another-address-is-a-contract
+	// --> EXTCODESIZE returns 0 if it is called from the constructor of a contract. So if you are using this in a security sensitive setting, you would have to consider if this is a problem.
+	function isContract(address _addr) private returns (bool iscontract){
+        uint32 size;
+        assembly {
+            size := extcodesize(_addr)
+        }
+        return (size > 0);
+    }
     
 }

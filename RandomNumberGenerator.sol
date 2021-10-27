@@ -1,6 +1,6 @@
 pragma solidity ^0.8.7;
 
-import "./VRFConsumerBase.sol";
+import "@chainlink/contracts/src/v0.8/VRFConsumerBase.sol";
 import "./Lottery.sol";
 
 contract RandomNumberGenerator is VRFConsumerBase {
@@ -10,18 +10,18 @@ contract RandomNumberGenerator is VRFConsumerBase {
     uint256 fee;
 
     constructor(address _vrfCoordinator, address _link, bytes32 _keyHash, uint256 _fee)
-        VRFConsumerBase(_vrfCoordinator, _link) public {
+        VRFConsumerBase(_vrfCoordinator, _link) {
             keyHash = _keyHash;
             fee = _fee;
     }
 
-    function fulfillRandomness(bytes32 _requestId, uint256 _randomness) external override {
+    function fulfillRandomness(bytes32 _requestId, uint256 _randomness) internal override {
         Lottery(requester).playerDrawn(_requestId, _randomness);
     }
 
     function request(uint256 _seed) public returns(bytes32 requestId) {
         require(keyHash != bytes32(0), "Must have valid key hash");
         requester = msg.sender;
-        return this.requestRandomness(keyHash, fee, _seed);
+        return requestRandomness(keyHash, fee);
     }
 }

@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.7;
 
-import "./RandomNumberGenerator.sol";
-
 // he usado este tutorial: https://betterprogramming.pub/build-a-verifiably-random-lottery-smart-contract-on-ethereum-c1daacc1ca4e
-
-// TODO: deploying both lottery and random generator works, but 
-// --> Error when calling request of randomNumberGenerator (how to correctly deploy this contract? (right now using variables of https://docs.chain.link/docs/get-a-random-number/)
-// --> Error when calling finishLottery (submitEntry is working)
 
 contract Lottery {
     enum State { Open, Closed }
@@ -20,9 +14,8 @@ contract Lottery {
     uint public winningPlayerIndex;
 
     event NewEntry(address player);
-    event LotteryStateChanged(State newState);
-    event NumberRequested(bytes32 requestId);
-	event PlayerDrawn(bytes32 requestId, uint winningPlayerIndex);
+    event LotteryStateChanged(State state);
+	event PlayerDrawn(uint winningPlayerIndex);
     
     // modifier to be sure that the lottery is in the state it should be
     modifier isState(State _state) {
@@ -31,45 +24,36 @@ contract Lottery {
     }
     
     // constructor
-	constructor (uint _entryFee, address _contractManager, address _randomNumberGenerator) {
-		require(_entryFee > 0, "Entry fee must be greater than 0");
-		require(_randomNumberGenerator != address(0), "Random number generator must be valid address");
-		require(isContract(_randomNumberGenerator), "Random number generator must be smart contract");
+	constructor (uint _entryFee_in_wei, address _contractManager) {
+		require(_entryFee_in_wei > 0, "Entry fee must be greater than 0");
 		require(_contractManager != address(0), "Contract manager must be valid address");
-		entryFee = _entryFee;
-		randomNumberGenerator = _randomNumberGenerator;
+		entryFee = _entryFee_in_wei;
 		contractManager = _contractManager;
 		changeState(State.Open);
 	}
     
     // players can only submit entry if the lottery is open
     function submitEntry() public payable isState(State.Open) {
-        require(msg.value >= entryFee, "Minimum entry fee required");
+        require(msg.value >= entryFee * 1 wei, "Minimum entry fee required");
+        require(msg.sender != contractManager, "Contract manager can't participate in the lottery.");
         entries.push(msg.sender);
         emit NewEntry(msg.sender);
     }
     
     // gets called by contract manager
-    function finishLottery(uint256 _seed) public isState(State.Open){
+    function finishLottery() public isState(State.Open){
         require(msg.sender == contractManager, "Only contract manager can finish the lottery.");
         changeState(State.Closed);
-        drawPlayer(_seed);
+        drawPlayer();
     }
     
-    function drawPlayer(uint256 _seed) public {
-		randomNumberRequestId = RandomNumberGenerator(randomNumberGenerator).request(_seed);
-		emit NumberRequested(randomNumberRequestId);
-	}
-    
-    // gets called in RandomNumberGenerator after calling drawPlayer()
-    function playerDrawn(bytes32 _randomNumberRequestId, uint _randomNumber) public isState(State.Closed) {
-		if (_randomNumberRequestId == randomNumberRequestId) {
-			winningPlayerIndex = _randomNumber % entries.length;
-			emit PlayerDrawn(_randomNumberRequestId, winningPlayerIndex);
+    function drawPlayer() public {
+			winningPlayerIndex = random();
+			emit PlayerDrawn(winningPlayerIndex);
 			pay(entries[winningPlayerIndex]);
 			reset();
-		}
 	}
+    
 	
 	// give money to winning player
 	function pay(address winner) private {
@@ -91,12 +75,19 @@ contract Lottery {
 	
 	// warning from https://ethereum.stackexchange.com/questions/15641/how-does-a-contract-find-out-if-another-address-is-a-contract
 	// --> EXTCODESIZE returns 0 if it is called from the constructor of a contract. So if you are using this in a security sensitive setting, you would have to consider if this is a problem.
-	function isContract(address _addr) private returns (bool iscontract){
+	function isContract(address _addr) private view returns (bool iscontract){
         uint32 size;
         assembly {
             size := extcodesize(_addr)
         }
         return (size > 0);
+    }
+    
+    function random() public view returns (uint) {
+        uint number = uint(keccak256(abi.encodePacked(block.difficulty, block.timestamp, entries)));
+        uint rand = number % entries.length;
+        return rand;
+        
     }
     
 }

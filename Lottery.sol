@@ -1,17 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.7;
 
-// he usado este tutorial: https://betterprogramming.pub/build-a-verifiably-random-lottery-smart-contract-on-ethereum-c1daacc1ca4e
-
 contract Lottery {
     enum State { Open, Closed }
     State public state;
     uint public entryFee;
-    bytes32 randomNumberRequestId;
-    address[] public entries; //TODO: remove public but keep it here for now for debugging reasons
-    address randomNumberGenerator;
+    address[] entries;
     address contractManager;
-    uint public winningPlayerIndex;
+    uint winningPlayerIndex;
 
     event NewEntry(address player);
     event LotteryStateChanged(State state);
@@ -43,18 +39,21 @@ contract Lottery {
     // gets called by contract manager
     function finishLottery() public isState(State.Open){
         require(msg.sender == contractManager, "Only contract manager can finish the lottery.");
+
+        // So in between finishing and resetting, no one can accidentally enter again
         changeState(State.Closed);
+
         drawPlayer();
     }
     
-    function drawPlayer() public {
+    // draw the winning player, pay him and reset the lottery
+    function drawPlayer() private {
 			winningPlayerIndex = random();
 			emit PlayerDrawn(winningPlayerIndex);
 			pay(entries[winningPlayerIndex]);
 			reset();
 	}
     
-	
 	// give money to winning player
 	function pay(address winner) private {
 		uint balance = address(this).balance;
@@ -65,9 +64,9 @@ contract Lottery {
     function reset() private {
         delete entries;
         changeState(State.Open);
-        
 	}
     
+    // Simple function to change state
     function changeState(State newState) private {
 		state = newState;
 		emit LotteryStateChanged(state);
@@ -83,11 +82,10 @@ contract Lottery {
         return (size > 0);
     }
     
-    function random() public view returns (uint) {
+    // generates a random number of 
+    function random() private view returns (uint) {
         uint number = uint(keccak256(abi.encodePacked(block.difficulty, block.timestamp, entries)));
         uint rand = number % entries.length;
         return rand;
-        
-    }
-    
+    } 
 }
